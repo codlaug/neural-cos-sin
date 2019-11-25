@@ -1,0 +1,9 @@
+{
+  "name": "neural-network2",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "@tensorflow/tfjs": "^1.3.2"
+  }
+}
