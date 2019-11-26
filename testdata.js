@@ -1,3 +1,3 @@
-const json = require('testdata.json')
+const json = require('./testdata.json')
 
-module.exports = JSON.parse(json)
+module.exports = json

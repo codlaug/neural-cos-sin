@@ -1,38 +1,32 @@
 const tf = require('@tensorflow/tfjs')
 const { MinMaxScaler } = require('machinelearn/preprocessing')
-// const data = require('./testdata.js')
 
-// I think I need to normalize the data
+let data = require('./testdata.js').slice(0, 100)
 
-let data = []
 
-for(let i = 0; i < 40; ++i) {
-  data[i] = {
-    cos: 7000*Math.cos(i),
-    sin: 7000*Math.sin(i),
-    tan: Math.tan(i)
-  }
-}
-
-for(let i = 0; i < 40; ++i) {
+for(let i = 0; i < data.length; ++i) {
   data[i] = [
-    data[i].cos,
-    data[i].sin,
-    data[i].tan
+    data[i].open,
+    data[i].close,
+    data[i].high,
+    data[i].low,
+    data[i].volume,
   ]
 }
+
 
 const scaler = new MinMaxScaler({ featureRange: [0, 1] })
 
 //normalize the data
 data = scaler.fit_transform(data)
 
+
 const TIME_STEPS = 4
-const FEATURE_COUNT = 3
+const FEATURE_COUNT = 5
 
 const model = tf.sequential()
 model.add(tf.layers.lstm({
-  units: 16,
+  units: 128,
   inputShape: [TIME_STEPS, FEATURE_COUNT],
 //   recurrentInitializer: 'glorotNormal',
 //   returnSequences: true
@@ -43,12 +37,13 @@ model.add(tf.layers.lstm({
 //     recurrentInitializer: 'glorotNormal',
 //     // returnSequences: true
 //   }))
-
-model.add(tf.layers.dense({units: 1, activation: 'linear'}))
+model.add(tf.layers.dropout(0.5))
+model.add(tf.layers.dense({units: 24, activation: 'relu'}))
+model.add(tf.layers.dense({units: 1, activation: 'sigmoid'}))
 // model.add(tf.layers.timeDistributed(
 //     {layer: tf.layers.dense({units: OUTPUT_VOCABULARY})}));
 
-const optimizer = tf.train.rmsprop(0.1)
+const optimizer = tf.train.rmsprop(0.01)
 model.compile({optimizer, loss: tf.losses.meanSquaredError})
 
 
@@ -65,6 +60,8 @@ function encodeBatch(sequences, numRows) {
         buffer.set(value[0], exampleIndex, sequenceIndex, 0);
         buffer.set(value[1], exampleIndex, sequenceIndex, 1);
         buffer.set(value[2], exampleIndex, sequenceIndex, 2);
+        buffer.set(value[3], exampleIndex, sequenceIndex, 3);
+        buffer.set(value[4], exampleIndex, sequenceIndex, 4);
       }
     }
     return buffer.toTensor().as3D(numExamples, numRows, FEATURE_COUNT);
@@ -77,7 +74,7 @@ function encodeAnswerBatch(nextChars, numRows) {
     for (let n = 0; n < numExamples; ++n) {
         const exampleIndex = n
       const value = nextChars[n];
-        buffer.set(value[0]+value[1], exampleIndex, 0);
+        buffer.set(value[1], exampleIndex, 0);
     }
     return buffer.toTensor().as2D(numExamples, 1);
 }
@@ -100,18 +97,21 @@ const ys = encodeAnswerBatch(nextCharsInSequence, TIME_STEPS)
 console.log('xs', xs.arraySync())
 console.log('ys', ys.arraySync())
 
-model.fit(xs, ys, {epochs: 10}).then(h => {
-    console.log('loss', h.history.loss)
-
-    const rando = Math.floor(Math.random() * 100)+ 60
-    const randoTest = []
-    for(let i = 0; i < 4; ++i) {
-        randoTest[i] = [
-            Math.cos(rando+i),
-            Math.sin(rando+i),
-            Math.tan(rando+i)
-        ]
+const fitOptions = {
+    epochs: 10,
+    validationSplit: 0.1,
+    callbacks: {
+        onEpochEnd: (t,h) => {
+            console.log(t,h)
+        }
     }
-    console.log('predict', model.predict(encodeBatch([randoTest], 4)).arraySync(), Math.cos(rando+4)+Math.sin(rando+4))
+}
+
+model.fit(xs, ys, fitOptions).then(h => {
+    console.log('loss', h)
+
+    const rando = Math.floor(Math.random() * data.length-5)
+    const randoTest = data.slice(rando, rando+4)
+    console.log('predict', scaler.inverse_transform([0, model.predict(encodeBatch([randoTest], 4)).arraySync()[0][0]])[1], scaler.inverse_transform(data[rando+4])[1])
 })
 
